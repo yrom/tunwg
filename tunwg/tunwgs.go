@@ -53,6 +53,19 @@ func tunwgServer() {
 	log.Fatalf("failed to run: %v", runSniProxy(l80, l443))
 }
 
+// timeoutConn wraps a net.Conn to set a read deadline before each Read.
+// This ensures relay goroutines detect dead TCP connections (e.g., client
+// disappeared without sending FIN) within the timeout period.
+type timeoutConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c *timeoutConn) Read(b []byte) (int, error) {
+	c.Conn.SetReadDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Read(b)
+}
+
 func allowUserKey(key wgtypes.Key, endpoint string) error {
 	ipc := []string{
 		"public_key=" + hex.EncodeToString(key[:]),
@@ -152,8 +165,14 @@ func apiMux() *http.ServeMux {
 			log.Printf("relay listen error: %v", err)
 			return
 		}
-		if err := internal.RelayServer(conn, udpConn, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: internal.GetListenPort()}); err != nil && !errors.Is(err, io.EOF) {
-			log.Printf("relay error: %v", err)
+		defer udpConn.Close()
+		log.Printf("relay: started, remote=%v udp=%v", conn.RemoteAddr(), udpConn.LocalAddr())
+		// Wrap conn with read timeout (3x keepalive interval) to detect dead clients.
+		tc := &timeoutConn{Conn: conn, timeout: 90 * time.Second}
+		if err := internal.RelayServer(tc, udpConn, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: internal.GetListenPort()}); err != nil && !errors.Is(err, io.EOF) {
+			log.Printf("relay: ended, remote=%v udp=%v err=%v", conn.RemoteAddr(), udpConn.LocalAddr(), err)
+		} else {
+			log.Printf("relay: ended, remote=%v udp=%v", conn.RemoteAddr(), udpConn.LocalAddr())
 		}
 	})
 	return mux
