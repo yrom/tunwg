@@ -172,31 +172,39 @@ func establishRelay() (string, error) {
 	}
 	httpReq, err := http.NewRequest("GET", "https://"+internal.ApiDomain()+"/relay", nil)
 	if err != nil {
+		conn.Close()
 		return "", err
 	}
 	httpReq.Header.Set("Connection", "Upgrade")
 	httpReq.Header.Set("Upgrade", "udp-relay")
 
 	if err := httpReq.Write(conn); err != nil {
+		conn.Close()
 		return "", err
 	}
 	httpResp, err := http.ReadResponse(bufio.NewReader(conn), httpReq)
 	if err != nil {
+		conn.Close()
 		return "", err
 	}
 	if httpResp.StatusCode != http.StatusSwitchingProtocols {
 		b, _ := io.ReadAll(httpResp.Body)
 		httpResp.Body.Close()
+		conn.Close()
 		return "", fmt.Errorf("unexpected relay status: %v %v", httpResp.StatusCode, string(b))
 	}
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
+		conn.Close()
 		return "", err
 	}
 	dev, err := internal.GetWgDeviceInfo()
 	if err != nil {
+		conn.Close()
+		udpConn.Close()
 		return "", err
 	}
+
 	go func() {
 		err := internal.RelayServer(conn, udpConn, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: dev.ListenPort})
 		if err != nil && !errors.Is(err, io.EOF) {
