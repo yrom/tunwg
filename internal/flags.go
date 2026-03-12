@@ -59,3 +59,17 @@ func UseRelay() bool {
 func TestOnlyRunLocalhost() bool {
 	return os.Getenv("TUNWG_TEST_LOCALHOST") == "true"
 }
+
+func ListenAddr() string {
+	if addr := os.Getenv("TUNWG_LISTEN_ADDR"); addr != "" {
+		return addr
+	}
+	return ":443"
+}
+
+func HttpAddr() string {
+	if addr := os.Getenv("TUNWG_HTTP_ADDR"); addr != "" {
+		return addr
+	}
+	return ":80"
+}

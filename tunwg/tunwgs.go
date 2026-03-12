@@ -180,9 +180,9 @@ func apiMux() *http.ServeMux {
 
 func runSniProxy(l80, l443 *tcpproxy.TargetListener) error {
 	var proxy tcpproxy.Proxy
-	proxy.AddRoute(":80", l80)
-	proxy.AddSNIRoute(":443", internal.ApiDomain(), l443)
-	proxy.AddSNIRouteFunc(":443", func(ctx context.Context, sniName string) (tcpproxy.Target, bool) {
+	proxy.AddRoute(internal.HttpAddr(), l80)
+	proxy.AddSNIRoute(internal.ListenAddr(), internal.ApiDomain(), l443)
+	proxy.AddSNIRouteFunc(internal.ListenAddr(), func(ctx context.Context, sniName string) (tcpproxy.Target, bool) {
 		log.Printf("received request for: %v", sniName)
 		addr, err := getIPForDomain(sniName)
 		if err != nil {
